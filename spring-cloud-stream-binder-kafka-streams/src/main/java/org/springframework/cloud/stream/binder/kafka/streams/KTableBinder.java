@@ -73,20 +73,31 @@ class KTableBinder extends
 		if (!StringUtils.hasText(group)) {
 			group = binderConfigurationProperties.getApplicationId();
 		}
-		this.kafkaTopicProvisioner.provisionConsumerDestination(name, group, extendedConsumerProperties);
+
+		String[] inputTopics = StringUtils.commaDelimitedListToStringArray(name);
+		for (String inputTopic : inputTopics) {
+			this.kafkaTopicProvisioner.provisionConsumerDestination(inputTopic, group, extendedConsumerProperties);
+		}
 
 		if (extendedConsumerProperties.getExtension().isEnableDlq()) {
-			String dlqName = StringUtils.isEmpty(extendedConsumerProperties.getExtension().getDlqName()) ?
-					"error." + name + "." + group : extendedConsumerProperties.getExtension().getDlqName();
-			KafkaStreamsDlqDispatch kafkaStreamsDlqDispatch = new KafkaStreamsDlqDispatch(dlqName, binderConfigurationProperties,
-					extendedConsumerProperties.getExtension());
-			SendToDlqAndContinue sendToDlqAndContinue = this.getApplicationContext().getBean(SendToDlqAndContinue.class);
-			sendToDlqAndContinue.addKStreamDlqDispatch(name, kafkaStreamsDlqDispatch);
-
 			StreamsConfig streamsConfig = this.KafkaStreamsBindingInformationCatalogue.getStreamsConfig(inputTarget);
-			DeserializationExceptionHandler deserializationExceptionHandler = streamsConfig.defaultDeserializationExceptionHandler();
-			if(deserializationExceptionHandler instanceof SendToDlqAndContinue) {
-				((SendToDlqAndContinue)deserializationExceptionHandler).addKStreamDlqDispatch(name, kafkaStreamsDlqDispatch);
+
+			KafkaStreamsDlqDispatch kafkaStreamsDlqDispatch = !StringUtils.isEmpty(extendedConsumerProperties.getExtension().getDlqName()) ?
+					new KafkaStreamsDlqDispatch(extendedConsumerProperties.getExtension().getDlqName(), binderConfigurationProperties,
+							extendedConsumerProperties.getExtension()) : null;
+			for (String inputTopic : inputTopics) {
+				if (StringUtils.isEmpty(extendedConsumerProperties.getExtension().getDlqName())) {
+					String dlqName = "error." + inputTopic + "." + group;
+					kafkaStreamsDlqDispatch = new KafkaStreamsDlqDispatch(dlqName, binderConfigurationProperties,
+							extendedConsumerProperties.getExtension());
+				}
+				SendToDlqAndContinue sendToDlqAndContinue = this.getApplicationContext().getBean(SendToDlqAndContinue.class);
+				sendToDlqAndContinue.addKStreamDlqDispatch(inputTopic, kafkaStreamsDlqDispatch);
+
+				DeserializationExceptionHandler deserializationExceptionHandler = streamsConfig.defaultDeserializationExceptionHandler();
+				if (deserializationExceptionHandler instanceof SendToDlqAndContinue) {
+					((SendToDlqAndContinue) deserializationExceptionHandler).addKStreamDlqDispatch(inputTopic, kafkaStreamsDlqDispatch);
+				}
 			}
 		}
 		return new DefaultBinding<>(name, group, inputTarget, null);

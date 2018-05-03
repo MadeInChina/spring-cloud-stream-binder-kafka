@@ -50,6 +50,7 @@ import org.springframework.util.ObjectUtils;
  * @author Artem Bilan
  * @author Oleg Zhurakousky
  * @author Jon Schneider
+ * @author Thomas Cheyney
  */
 public class KafkaBinderMetrics implements MeterBinder, ApplicationListener<BindingCreatedEvent> {
 
@@ -64,6 +65,8 @@ public class KafkaBinderMetrics implements MeterBinder, ApplicationListener<Bind
 	private ConsumerFactory<?, ?> defaultConsumerFactory;
 
 	private final MeterRegistry meterRegistry;
+
+	private Consumer<?, ?> metadataConsumer;
 
 	public KafkaBinderMetrics(KafkaMessageChannelBinder binder,
 			KafkaBinderConfigurationProperties binderConfigurationProperties,
@@ -104,7 +107,10 @@ public class KafkaBinderMetrics implements MeterBinder, ApplicationListener<Bind
 
 	private double calculateConsumerLagOnTopic(String topic, String group) {
 		long lag = 0;
-		try (Consumer<?, ?> metadataConsumer = createConsumerFactory(group).createConsumer()) {
+		try {
+			if (metadataConsumer == null) {
+				metadataConsumer = createConsumerFactory(group).createConsumer();
+			}
 			List<PartitionInfo> partitionInfos = metadataConsumer.partitionsFor(topic);
 			List<TopicPartition> topicPartitions = new LinkedList<>();
 			for (PartitionInfo partitionInfo : partitionInfos) {
@@ -134,8 +140,9 @@ public class KafkaBinderMetrics implements MeterBinder, ApplicationListener<Bind
 			Map<String, Object> props = new HashMap<>();
 			props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
 			props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
-			if (!ObjectUtils.isEmpty(binderConfigurationProperties.getConsumerConfiguration())) {
-				props.putAll(binderConfigurationProperties.getConsumerConfiguration());
+			Map<String, Object> mergedConfig = this.binderConfigurationProperties.mergedConsumerConfiguration();
+			if (!ObjectUtils.isEmpty(mergedConfig)) {
+				props.putAll(mergedConfig);
 			}
 			if (!props.containsKey(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG)) {
 				props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
