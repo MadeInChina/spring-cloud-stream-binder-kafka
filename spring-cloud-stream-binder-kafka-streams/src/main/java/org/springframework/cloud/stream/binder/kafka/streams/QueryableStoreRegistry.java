@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.errors.InvalidStateStoreException;
 import org.apache.kafka.streams.state.QueryableStoreType;
 import org.apache.kafka.streams.errors.InvalidStateStoreException;
 
